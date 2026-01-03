@@ -11,6 +11,8 @@ def get_9news_breaking_story():
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
+        print(f"[DEBUG] 9News status code: {response.status_code}")
+        print(f"[DEBUG] 9News content length: {len(response.text)}")
         soup = BeautifulSoup(response.text, 'html.parser')
 
         # Try several possible selectors for breaking/top story
@@ -25,15 +27,19 @@ def get_9news_breaking_story():
         top_story = None
         for sel in selectors:
             top_story = soup.select_one(sel)
+            print(f"[DEBUG] Selector '{sel}' found: {top_story is not None}")
             if top_story:
+                print(f"[DEBUG] top_story HTML: {top_story}")
                 break
 
         if top_story:
             # safe-get anchor and href
             anchor = top_story.find('a') or top_story.select_one('a')
+            print(f"[DEBUG] anchor: {anchor}")
             link = None
             if anchor:
                 link = anchor.get('href') or anchor.get('data-href')
+            print(f"[DEBUG] link: {link}")
             # normalize relative URLs
             if link:
                 from urllib.parse import urljoin
@@ -45,6 +51,7 @@ def get_9news_breaking_story():
                 title = anchor.get_text(strip=True)
             if not title:
                 title = top_story.get_text(strip=True)
+            print(f"[DEBUG] title: {title}")
 
             # fetch article content if link available
             full_content = ""
@@ -52,8 +59,10 @@ def get_9news_breaking_story():
             try:
                 if link:
                     article_response = requests.get(link, headers=headers, timeout=10)
+                    print(f"[DEBUG] Article status code: {article_response.status_code}")
                     article_soup = BeautifulSoup(article_response.text, 'html.parser')
-            except Exception:
+            except Exception as e:
+                print(f"[DEBUG] Article fetch failed: {e}")
                 article_soup = None
 
             # try common paragraph containers
@@ -61,6 +70,7 @@ def get_9news_breaking_story():
             if article_soup:
                 for psel in ['.p-rich-text__content p', 'article p', '.article-body p', 'p']:
                     paragraphs = article_soup.select(psel)
+                    print(f"[DEBUG] Article selector '{psel}' found {len(paragraphs)} paragraphs")
                     if paragraphs:
                         break
             if paragraphs:
@@ -83,6 +93,8 @@ def get_9news_breaking_story():
                     from urllib.parse import urljoin
                     image_url = urljoin(url, img2.get('src'))
 
+            print(f"[DEBUG] image_url: {image_url}")
+            print(f"[DEBUG] full_content length: {len(full_content)}")
             return {
                 "title": title or "",
                 "url": link or url,
