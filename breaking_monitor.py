@@ -4,111 +4,85 @@ import json
 from datetime import datetime
 import os
 
-def get_9news_breaking_story():
-    """抓取 9News 首頁並尋找突發新聞"""
-    url = "https://www.9news.com.au/"
-    headers = {'User-Agent': 'Mozilla/5.0'} # 模擬瀏覽器
-    
+def get_guardian_breaking_story():
+    """Fetch the top headline from The Guardian International homepage."""
+    url = "https://www.theguardian.com/international"
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         response = requests.get(url, headers=headers, timeout=10)
-        print(f"[DEBUG] 9News status code: {response.status_code}")
-        print(f"[DEBUG] 9News content length: {len(response.text)}")
+        print(f"[DEBUG] Guardian status code: {response.status_code}")
+        print(f"[DEBUG] Guardian content length: {len(response.text)}")
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Try several possible selectors for breaking/top story
-        selectors = [
-            '.story__headline--is-breaking',
-            '.story__headline',
-            '.c-breaking-news',
-            '.breaking',
-            'a[data-testid="top-story"]'
-        ]
+        # The top headline is usually in a <a> with data-link-name="article"
+        top_story = soup.select_one('a[data-link-name="article"]')
+        if not top_story:
+            print("[DEBUG] No top story found on The Guardian homepage.")
+            return None
 
-        top_story = None
-        for sel in selectors:
-            top_story = soup.select_one(sel)
-            print(f"[DEBUG] Selector '{sel}' found: {top_story is not None}")
-            if top_story:
-                print(f"[DEBUG] top_story HTML: {top_story}")
-                break
 
-        if top_story:
-            # safe-get anchor and href
-            anchor = top_story.find('a') or top_story.select_one('a')
-            print(f"[DEBUG] anchor: {anchor}")
-            link = None
-            if anchor:
-                link = anchor.get('href') or anchor.get('data-href')
-            print(f"[DEBUG] link: {link}")
-            # normalize relative URLs
+        link = top_story.get('href')
+        # Ensure the link is absolute
+        from urllib.parse import urljoin
+        link = urljoin(url, link) if link else url
+        title = top_story.get_text(strip=True)
+        print(f"[DEBUG] Guardian top story title: {title}")
+        print(f"[DEBUG] Guardian top story link: {link}")
+
+        # Fetch article content and image
+        full_content = ""
+        image_url = ""
+        article_soup = None
+        try:
             if link:
-                from urllib.parse import urljoin
-                link = urljoin(url, link)
-
-            # get title from anchor text or element text
-            title = None
-            if anchor:
-                title = anchor.get_text(strip=True)
-            if not title:
-                title = top_story.get_text(strip=True)
-            print(f"[DEBUG] title: {title}")
-
-            # fetch article content if link available
-            full_content = ""
+                article_response = requests.get(link, headers=headers, timeout=10)
+                print(f"[DEBUG] Article status code: {article_response.status_code}")
+                article_soup = BeautifulSoup(article_response.text, 'html.parser')
+        except Exception as e:
+            print(f"[DEBUG] Article fetch failed: {e}")
             article_soup = None
-            try:
-                if link:
-                    article_response = requests.get(link, headers=headers, timeout=10)
-                    print(f"[DEBUG] Article status code: {article_response.status_code}")
-                    article_soup = BeautifulSoup(article_response.text, 'html.parser')
-            except Exception as e:
-                print(f"[DEBUG] Article fetch failed: {e}")
-                article_soup = None
 
-            # try common paragraph containers
-            paragraphs = []
-            if article_soup:
-                for psel in ['.p-rich-text__content p', 'article p', '.article-body p', 'p']:
-                    paragraphs = article_soup.select(psel)
-                    print(f"[DEBUG] Article selector '{psel}' found {len(paragraphs)} paragraphs")
-                    if paragraphs:
-                        break
-            if paragraphs:
-                full_content = "\n\n".join([p.get_text(strip=True) for p in paragraphs])
+        # Try to get paragraphs
+        paragraphs = []
+        if article_soup:
+            for psel in ['.article-body-commercial-selector p', 'article p', 'p']:
+                paragraphs = article_soup.select(psel)
+                print(f"[DEBUG] Article selector '{psel}' found {len(paragraphs)} paragraphs")
+                if paragraphs:
+                    break
+        if paragraphs:
+            full_content = "\n\n".join([p.get_text(strip=True) for p in paragraphs])
 
-            # try to get image url from meta tags or img
-            image_url = ""
-            if article_soup:
-                meta_img = article_soup.select_one('meta[property="og:image"]') or article_soup.select_one('meta[name="og:image"]')
-                if meta_img and meta_img.get('content'):
-                    image_url = meta_img.get('content')
-                else:
-                    img = article_soup.select_one('img')
-                    if img and img.get('src'):
-                        image_url = urljoin(url, img.get('src'))
-            # fallback: try image inside top_story
+        # Try to get image from meta tags or main article image
+        if article_soup:
+            meta_img = article_soup.select_one('meta[property="og:image"]') or article_soup.select_one('meta[name="og:image"]')
+            if meta_img and meta_img.get('content'):
+                image_url = meta_img.get('content')
             if not image_url:
-                img2 = top_story.find('img')
-                if img2 and img2.get('src'):
+                # Try to find main image in figure or img tags commonly used for lead images
+                main_img = article_soup.select_one('figure img') or article_soup.select_one('img')
+                if main_img and main_img.get('src'):
+                    image_url = main_img.get('src')
+                    # If image_url is relative, make it absolute
                     from urllib.parse import urljoin
-                    image_url = urljoin(url, img2.get('src'))
+                    image_url = urljoin(link, image_url)
 
-            print(f"[DEBUG] image_url: {image_url}")
-            print(f"[DEBUG] full_content length: {len(full_content)}")
-            return {
-                "title": title or "",
-                "url": link or url,
-                "content": full_content,
-                "publishedAt": datetime.utcnow().isoformat() + "Z",
-                "imageUrl": image_url or ""
-            }
+        print(f"[DEBUG] Guardian image_url: {image_url}")
+        print(f"[DEBUG] Guardian full_content length: {len(full_content)}")
+        return {
+            "title": title or "",
+            "url": link or url,
+            "content": full_content,
+            "publishedAt": datetime.utcnow().isoformat() + "Z",
+            "imageUrl": image_url or ""
+        }
     except Exception as e:
-        print(f"[ERROR] Scaping 9News failed: {e}")
+        print(f"[ERROR] Scaping The Guardian failed: {e}")
     return None
 
 def process_breaking_news():
     # 1. 檢查有無突發
-    breaking_story = get_9news_breaking_story()
+    breaking_story = get_guardian_breaking_story()
     if not breaking_story:
         return
 
@@ -130,11 +104,9 @@ def process_breaking_news():
         # 5. 插入到最前面 (index 0)
         current_news_list.insert(0, translated_item[0])
         
-        # 6. (選做) 保持檔案大小，例如只保留最新的 50 條
-        final_list = current_news_list[:50]
-        
+        # 6. 不再限制只保留最新 50 條
         # 7. 上傳回 GCS
-        upload_json_to_gcs("news.json", final_list)
+        upload_json_to_gcs("news.json", current_news_list)
         upload_text_to_gcs("last_breaking_url.txt", breaking_story['url'])
         print(f"[SUCCESS] Breaking News posted: {translated_item[0]['title']}")
 
