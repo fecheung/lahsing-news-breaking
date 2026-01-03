@@ -249,8 +249,8 @@ def translate_breaking_story(breaking_data: dict):
     2. title: 以 **【突發】** 開頭，撰寫吸睛標題。
     3. summary: 簡短摘要。
     4. articleDetail: 完整翻譯內容並保持分段 (用 \\n 分隔)。內容中請用單引號 '。
-    5. region: 選擇最貼切的澳洲城市。
-    6. category: 選擇適合的新聞類別。
+    5. region: 選擇最貼切的澳洲主要城市，例如「雪梨」、「墨爾本」等。如果新聞涉及全澳洲,使用「澳洲」。如果是國際新聞，使用「國際」。(繁體中文)。
+    6. category: "突發"。
     7. imageUrl: 直接複製 "{breaking_data['imageUrl']}"，嚴禁 Markdown 格式。
     8. citations: 將 "{breaking_data['url']}" 放入單元素陣列 ["..."]。
 
