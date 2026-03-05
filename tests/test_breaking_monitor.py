@@ -2,6 +2,8 @@ import json
 import pytest
 
 from breaking_monitor import parse_json_safely, get_guardian_breaking_story
+from breaking_monitor import ensure_news_id
+import uuid
 
 
 def test_parse_json_safely_plain():
@@ -39,3 +41,11 @@ def test_get_guardian_breaking_story(monkeypatch):
     assert story['title'] == 'Breaking Title'
     assert 'Para1' in story['content']
     assert story['imageUrl'] == 'https://example.com/img.jpg'
+
+
+def test_ensure_news_id_assigns_uuid():
+    item = {"title": "Test"}
+    ensure_news_id(item)
+    assert 'id' in item
+    # validate UUID format
+    uuid.UUID(item['id'])

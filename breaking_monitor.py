@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import json
 from datetime import datetime
 import os
+import uuid
 
 def get_guardian_breaking_story():
     """Fetch the top headline from The Guardian International homepage."""
@@ -98,6 +99,7 @@ def process_breaking_news():
     # 注意：這裡翻譯出來應該是一個 Dict
     
     if translated_item:
+        ensure_news_id(translated_item[0])
         # 4. 下載現有的 news.json
         current_news_list = download_json_from_gcs("news.json")
         
@@ -217,6 +219,15 @@ def upload_json_to_gcs(file_name: str, data: list):
         storage_backend.upload_json(file_name, data)
     except Exception as e:
         print(f"[ERROR] upload_json_to_gcs failed: {e}")
+
+
+def ensure_news_id(item: dict):
+    """Ensure a news item dict has an 'id' field; assign a UUID if missing."""
+    if not isinstance(item, dict):
+        return item
+    if 'id' not in item or not item.get('id'):
+        item['id'] = str(uuid.uuid4())
+    return item
 
 
 import os
