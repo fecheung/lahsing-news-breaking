@@ -99,10 +99,12 @@ def process_breaking_news():
     # 注意：這裡翻譯出來應該是一個 Dict
     
     if translated_item:
-        ensure_news_id(translated_item[0])
         # 4. 下載現有的 news.json
         current_news_list = download_json_from_gcs("news.json")
-        
+
+        # Assign an incremental integer id based on existing items
+        assign_incremental_id(translated_item[0], current_news_list)
+
         # 5. 插入到最前面 (index 0)
         current_news_list.insert(0, translated_item[0])
         
@@ -221,12 +223,27 @@ def upload_json_to_gcs(file_name: str, data: list):
         print(f"[ERROR] upload_json_to_gcs failed: {e}")
 
 
-def ensure_news_id(item: dict):
-    """Ensure a news item dict has an 'id' field; assign a UUID if missing."""
+def assign_incremental_id(item: dict, current_list: list):
+    """Assign an integer `id` to `item` by taking max existing numeric id
+    in `current_list` and adding 1. If none found, starts at 1.
+    Non-numeric existing ids are ignored.
+    """
     if not isinstance(item, dict):
         return item
-    if 'id' not in item or not item.get('id'):
-        item['id'] = str(uuid.uuid4())
+    max_id = 0
+    for it in current_list or []:
+        if not isinstance(it, dict):
+            continue
+        if 'id' not in it:
+            continue
+        try:
+            v = int(it['id'])
+        except Exception:
+            # ignore non-integer ids
+            continue
+        if v > max_id:
+            max_id = v
+    item['id'] = max_id + 1
     return item
 
 

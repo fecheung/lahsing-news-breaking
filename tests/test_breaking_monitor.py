@@ -2,8 +2,7 @@ import json
 import pytest
 
 from breaking_monitor import parse_json_safely, get_guardian_breaking_story
-from breaking_monitor import ensure_news_id
-import uuid
+from breaking_monitor import assign_incremental_id
 
 
 def test_parse_json_safely_plain():
@@ -43,9 +42,19 @@ def test_get_guardian_breaking_story(monkeypatch):
     assert story['imageUrl'] == 'https://example.com/img.jpg'
 
 
-def test_ensure_news_id_assigns_uuid():
+def test_assign_incremental_id_with_existing():
+    current = [
+        {"id": 1},
+        {"id": "5"},
+        {"id": "not-an-int"},
+    ]
     item = {"title": "Test"}
-    ensure_news_id(item)
+    assign_incremental_id(item, current)
     assert 'id' in item
-    # validate UUID format
-    uuid.UUID(item['id'])
+    assert item['id'] == 6
+
+
+def test_assign_incremental_id_empty_list():
+    item = {"title": "First"}
+    assign_incremental_id(item, [])
+    assert item['id'] == 1
