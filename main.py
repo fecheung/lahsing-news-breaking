@@ -35,6 +35,57 @@ def start_breaking_monitor(request):
 # ---------------------------------------------------------
 # 本地測試用 (當你在 VS Code 直接執行 python main.py 時)
 # ---------------------------------------------------------
+
+@functions_framework.http
+def permalink_handler(request):
+    """POST /permalink
+    Accepts a JSON snapshot and uploads it to gs://lahsing-news-contents/permalinks/{id}.json
+    Requires Authorization: Bearer <UPLOADER_SECRET> if UPLOADER_SECRET env var is set.
+    """
+    from flask import jsonify
+    import os
+    import json
+    try:
+        # Auth check (optional)
+        expected = os.environ.get('UPLOADER_SECRET')
+        if expected:
+            auth = request.headers.get('Authorization', '')
+            if not auth.startswith('Bearer '):
+                return (jsonify({'status': 'error', 'message': 'Missing Authorization header'}), 401)
+            token = auth.split(' ', 1)[1].strip()
+            if token != expected:
+                return (jsonify({'status': 'error', 'message': 'Forbidden'}), 403)
+
+        data = request.get_json(silent=True)
+        if not data or 'id' not in data:
+            return (jsonify({'status': 'error', 'message': 'Missing id in payload'}), 400)
+
+        obj_id = str(data['id'])
+        object_name = f"permalinks/{obj_id}.json"
+        bucket_name = os.environ.get('GCS_BUCKET_NAME', 'lahsing-news-contents')
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+
+        if blob.exists():
+            public_url = f"https://storage.googleapis.com/{bucket_name}/{object_name}"
+            return (jsonify({'status': 'ok', 'public_url': public_url, 'skipped': True}), 200)
+
+        # Upload
+        blob.upload_from_string(json.dumps(data, ensure_ascii=False), content_type='application/json')
+        try:
+            blob.make_public()
+        except Exception:
+            logging.warning('make_public failed; continuing')
+
+        public_url = f"https://storage.googleapis.com/{bucket_name}/{object_name}"
+        return (jsonify({'status': 'ok', 'public_url': public_url}), 200)
+
+    except Exception as e:
+        logging.exception('Permalink upload failed')
+        return (jsonify({'status': 'error', 'message': str(e)}), 500)
+
 if __name__ == "__main__":
     # 在本地模擬一個 request 對象
     class MockRequest:
